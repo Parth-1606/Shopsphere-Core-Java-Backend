@@ -4,6 +4,7 @@ import com.parth.shopsphere.category.entity.Category;
 import com.parth.shopsphere.category.repository.CategoryRepository;
 import com.parth.shopsphere.common.exception.BadRequestException;
 import com.parth.shopsphere.common.exception.ResourceNotFoundException;
+import com.parth.shopsphere.common.service.FileStorageService;
 import com.parth.shopsphere.common.util.SlugUtil;
 import com.parth.shopsphere.product.dto.ProductRequest;
 import com.parth.shopsphere.product.dto.ProductResponse;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 
@@ -25,6 +27,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public Page<ProductResponse> searchProducts(
@@ -98,5 +101,19 @@ public class ProductService {
         // Soft delete
         product.setActive(false);
         productRepository.save(product);
+    }
+
+    @Transactional
+    public ProductResponse uploadImage(Long id, MultipartFile file) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+
+        if (product.getImageUrl() != null && !product.getImageUrl().isEmpty()) {
+            fileStorageService.deleteFile(product.getImageUrl());
+        }
+
+        String imageUrl = fileStorageService.storeFile(file, "product_" + id);
+        product.setImageUrl(imageUrl);
+        return ProductResponse.fromEntity(productRepository.save(product));
     }
 }

@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 
@@ -98,6 +99,19 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .success(true)
                 .message("Product deleted successfully")
+                .build());
+    }
+
+    @PostMapping("/{id}/image")
+    public ResponseEntity<ApiResponse<ProductResponse>> uploadProductImage(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file
+    ) {
+        ProductResponse response = productService.uploadImage(id, file);
+        return ResponseEntity.ok(ApiResponse.<ProductResponse>builder()
+                .success(true)
+                .message("Product image uploaded successfully")
+                .data(response)
                 .build());
     }
 }
