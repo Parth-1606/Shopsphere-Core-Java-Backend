@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: shopsphere
+  profiles:
+    active: dev
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+
+jwt:
+  # This is a sample base64 encoded secret key. In production, use environment variables!
+  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+  expirationMs: 86400000 # 1 day in milliseconds
+  refreshExpirationMs: 604800000 # 7 days in milliseconds
