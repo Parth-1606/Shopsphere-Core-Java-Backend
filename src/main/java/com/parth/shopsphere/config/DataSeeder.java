@@ -4,18 +4,22 @@ import com.parth.shopsphere.category.entity.Category;
 import com.parth.shopsphere.category.repository.CategoryRepository;
 import com.parth.shopsphere.product.entity.Product;
 import com.parth.shopsphere.product.repository.ProductRepository;
+import com.parth.shopsphere.user.enums.Role;
+import com.parth.shopsphere.user.entity.User;
+import com.parth.shopsphere.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Seeds the database with initial data when running locally with H2.
- * This ensures the frontend has products to display immediately.
+ * Seeds the database with initial data only when empty.
+ * Safe with persistent H2 — will not overwrite uploaded products.
  */
 @Component
 @Profile("local")
@@ -25,9 +29,32 @@ public class DataSeeder implements CommandLineRunner {
 
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public void run(String... args) throws Exception {
+        if (userRepository.count() == 0) {
+            log.info("Creating default test users...");
+            userRepository.save(User.builder()
+                    .firstName("Test")
+                    .lastName("User")
+                    .email("parth@gmail.com")
+                    .passwordHash(passwordEncoder.encode("Password123"))
+                    .role(Role.ROLE_USER)
+                    .isActive(true)
+                    .build());
+
+            userRepository.save(User.builder()
+                    .firstName("Shop")
+                    .lastName("Admin")
+                    .email("admin@shopsphere.com")
+                    .passwordHash(passwordEncoder.encode("Admin123!"))
+                    .role(Role.ROLE_ADMIN)
+                    .isActive(true)
+                    .build());
+        }
+
         if (categoryRepository.count() == 0) {
             log.info("Seeding initial data...");
 
@@ -57,6 +84,7 @@ public class DataSeeder implements CommandLineRunner {
                             .stockQuantity(15)
                             .category(electronics)
                             .slug("quantum-pro-laptop")
+                            .imageUrl("/assets/products/laptop.png")
                             .isActive(true)
                             .build(),
                     Product.builder()
@@ -66,6 +94,7 @@ public class DataSeeder implements CommandLineRunner {
                             .stockQuantity(42)
                             .category(wearables)
                             .slug("nebula-smartwatch-5")
+                            .imageUrl("/assets/products/smartwatch.png")
                             .isActive(true)
                             .build(),
                     Product.builder()
@@ -75,6 +104,7 @@ public class DataSeeder implements CommandLineRunner {
                             .stockQuantity(120)
                             .category(audio)
                             .slug("sonic-earbuds")
+                            .imageUrl("/assets/products/earbuds.png")
                             .isActive(true)
                             .build(),
                     Product.builder()
@@ -84,6 +114,7 @@ public class DataSeeder implements CommandLineRunner {
                             .stockQuantity(5)
                             .category(electronics)
                             .slug("dev-keyboard")
+                            .imageUrl("/assets/products/keyboard.png")
                             .isActive(true)
                             .build()
             ));

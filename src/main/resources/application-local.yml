@@ -1,12 +1,13 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:shopsphere_local;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    # File-based H2 so products, users, and orders survive app restarts
+    url: jdbc:h2:file:./data/shopsphere;DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE
     username: sa
     password:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:

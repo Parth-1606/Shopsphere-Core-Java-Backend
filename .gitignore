@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local persistent data ###
+data/
+uploads/
+reg.json
+

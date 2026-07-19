@@ -8,6 +8,7 @@ import com.parth.shopsphere.order.dto.OrderRequest;
 import com.parth.shopsphere.order.dto.OrderResponse;
 import com.parth.shopsphere.order.entity.Order;
 import com.parth.shopsphere.order.entity.OrderItem;
+import com.parth.shopsphere.order.entity.OrderStatus;
 import com.parth.shopsphere.order.repository.OrderRepository;
 import com.parth.shopsphere.product.entity.Product;
 import com.parth.shopsphere.product.repository.ProductRepository;
@@ -20,11 +21,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.List;
+import java.util.EnumSet;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+
+    private static final Map<OrderStatus, Set<OrderStatus>> ALLOWED_TRANSITIONS = Map.of(
+            OrderStatus.PENDING, EnumSet.of(OrderStatus.PROCESSING, OrderStatus.CANCELLED),
+            OrderStatus.PROCESSING, EnumSet.of(OrderStatus.SHIPPED, OrderStatus.CANCELLED),
+            OrderStatus.SHIPPED, EnumSet.of(OrderStatus.DELIVERED),
+            OrderStatus.DELIVERED, EnumSet.noneOf(OrderStatus.class),
+            OrderStatus.CANCELLED, EnumSet.noneOf(OrderStatus.class)
+    );
 
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
@@ -52,7 +63,7 @@ public class OrderService {
 
         for (var cartItem : cart.getItems()) {
             Product product = cartItem.getProduct();
-            
+
             if (!product.isActive()) {
                 throw new BadRequestException("Product " + product.getName() + " is no longer available");
             }
@@ -61,7 +72,6 @@ public class OrderService {
                 throw new BadRequestException("Not enough stock for product: " + product.getName());
             }
 
-            // Deduct stock (Optimistic Locking will catch concurrency issues here)
             product.setStockQuantity(product.getStockQuantity() - cartItem.getQuantity());
             productRepository.save(product);
 
@@ -71,7 +81,7 @@ public class OrderService {
                     .quantity(cartItem.getQuantity())
                     .priceAtPurchase(product.getPrice())
                     .build();
-            
+
             order.addItem(orderItem);
             total = total.add(orderItem.getPriceAtPurchase().multiply(BigDecimal.valueOf(orderItem.getQuantity())));
         }
@@ -80,7 +90,6 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
-        // Clear the cart
         cart.getItems().clear();
         cartRepository.save(cart);
 
@@ -97,6 +106,11 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public Page<OrderResponse> getAllOrders(Pageable pageable) {
+        return orderRepository.findAll(pageable).map(OrderResponse::fromEntity);
+    }
+
+    @Transactional(readOnly = true)
     public OrderResponse getOrderById(String email, Long orderId) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
@@ -105,5 +119,59 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found or does not belong to you"));
 
         return OrderResponse.fromEntity(order);
+    }
+
+    @Transactional
+    public OrderResponse cancelOrder(String email, Long orderId) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Order order = orderRepository.findByIdAndUserId(orderId, user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or does not belong to you"));
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new BadRequestException("Only PENDING orders can be cancelled by the customer");
+        }
+
+        applyStatus(order, OrderStatus.CANCELLED);
+        return OrderResponse.fromEntity(orderRepository.save(order));
+    }
+
+    @Transactional
+    public OrderResponse updateOrderStatus(Long orderId, OrderStatus newStatus) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
+
+        applyStatus(order, newStatus);
+        return OrderResponse.fromEntity(orderRepository.save(order));
+    }
+
+    private void applyStatus(Order order, OrderStatus newStatus) {
+        OrderStatus current = order.getStatus();
+
+        if (current == newStatus) {
+            throw new BadRequestException("Order is already " + newStatus);
+        }
+
+        Set<OrderStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(current, Set.of());
+        if (!allowed.contains(newStatus)) {
+            throw new BadRequestException(
+                    "Cannot transition order from " + current + " to " + newStatus
+            );
+        }
+
+        if (newStatus == OrderStatus.CANCELLED) {
+            restoreStock(order);
+        }
+
+        order.setStatus(newStatus);
+    }
+
+    private void restoreStock(Order order) {
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+            product.setStockQuantity(product.getStockQuantity() + item.getQuantity());
+            productRepository.save(product);
+        }
     }
 }
